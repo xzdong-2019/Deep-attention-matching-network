@@ -1,8 +1,9 @@
+#encoding:utf-8
 import sys
 import os
 import time
 
-import cPickle as pickle
+# import c as pickle
 import tensorflow as tf
 import numpy as np
 
@@ -14,19 +15,20 @@ import utils.douban_evaluation as eva
 
 import bin.train_and_evaluate as train
 import bin.test_and_evaluate as test
+import utils.utils as load_data
 
 # configure
 
 conf = {
     "data_path": "./data/douban/data.pkl",
-    "save_path": "./output/douban/DAM_new/",
+    "save_path": "./output/douban/DAM_hireaction_version_2.0/",
     "word_emb_init": "./data/douban/word_embedding.pkl",
-    #"data_path": "./data/ubuntu/data.pkl",
-    #"save_path": "./output/ubuntu/DAM_new/",
-    #"word_emb_init": "./data/ubuntu/word_embedding.pkl",
+    # "data_path": "./data/ubuntu/data.pkl",
+    # "save_path": "./output/ubuntu/DAM_new/",
+    # "word_emb_init": "./data/ubuntu/word_embedding.pkl",
     #"init_model": None,  #should be set for test  "output/douban/temp/model.ckpt.18"
 
-    "init_model": "output/douban/DAM_new/model.ckpt.19",  #should be set for test  "output/douban/temp/model.ckpt.18"
+    "init_model": "output/douban/DAM_hireaction_version_2.0/model.ckpt.14",  #should be set for test  "output/douban/temp/model.ckpt.18"
     "rand_seed": None, 
 
     "drop_dense": None,
@@ -45,7 +47,7 @@ conf = {
     "emb_size": 200,
     "batch_size": 200, #200 for test
 
-    "max_turn_num": 9,  
+    "max_turn_num": 4,  
     "max_turn_len": 50, 
 
     "max_to_keep": 1,
@@ -53,12 +55,14 @@ conf = {
     #"_EOS_": 28270, #for ubuntu data
     "_EOS_": 1, #1 for douban data
     "final_n_class": 1,
+    "max_turn_history_num":5,
+    "head_nums":4,
 }
-
 
 
 model = net.Net(conf)
 #train.train(conf, model)
+
 
 #test and evaluation, init_model in conf should be set
 test.test(conf, model)

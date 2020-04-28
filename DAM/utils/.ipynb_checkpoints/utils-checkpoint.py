@@ -1,3 +1,4 @@
+#encoding:utf-8
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
 
@@ -92,14 +93,15 @@ def load_data(filep, word2dict):
     _labels= []
 
     #加载文本
-    with open(filep, 'r', encoding='utf-8') as fr:
+    with open(filep, 'r') as fr:
         for line in fr:
             texts.append(line)
 
     for text in texts:
         _contexts = text.split('\t')
-        if len(_contexts)<3:
-            continue
+#         if len(_contexts)<3:
+#             print('--------------')
+#             continue
         _labels.append(_contexts[0])
         _responses.append(text_to_id(_contexts[-1], word2dict))
         # print(_contexts[1:-1])
@@ -113,7 +115,7 @@ def load_data(filep, word2dict):
 
     return datas
 
-def produce_one_sample(data, index, split_id, max_turn_num, max_turn_len, turn_cut_type='tail', term_cut_type='tail'):
+def produce_one_sample(data, index, split_id, max_turn_num, max_turn_history_num, max_turn_len, turn_cut_type='tail', term_cut_type='tail'):
     '''max_turn_num=10
        max_turn_len=50
        return y, nor_turns_nor_c, nor_r, turn_len, term_len, r_len
@@ -125,7 +127,7 @@ def produce_one_sample(data, index, split_id, max_turn_num, max_turn_len, turn_c
     turns = split_c(c, split_id)
     #normalize turns_c length, nor_turns length is max_turn_num
     #将turns扩充为最大轮数
-    nor_turns, turn_len = normalize_length(turns, max_turn_num, turn_cut_type)
+    nor_turns, turn_len = normalize_length(turns, max_turn_num+max_turn_history_num, turn_cut_type)  
 
     nor_turns_nor_c = []
     term_len = []
@@ -138,8 +140,18 @@ def produce_one_sample(data, index, split_id, max_turn_num, max_turn_len, turn_c
         term_len.append(nor_c_len)
 
     nor_r, r_len = normalize_length(r, max_turn_len, term_cut_type)
+    #     print(len(nor_turns_nor_c),turn_len)
+    #turn_len = 7
+    #max_turn_num = 2
+    #max_turn_history_num =5
+    if turn_len<=max_turn_num:
+        return y, nor_turns_nor_c[:max_turn_history_num], nor_turns_nor_c[:max_turn_num],  nor_r, turn_len, term_len[:max_turn_num], r_len
+    else:
+        if(max_turn_history_num+max_turn_num==turn_len):
+            return y, nor_turns_nor_c[:turn_len-max_turn_num],nor_turns_nor_c[-max_turn_num:], nor_r, turn_len, term_len[-max_turn_num:], r_len
+        else:
+            return y, nor_turns_nor_c[:turn_len-max_turn_num]+nor_turns_nor_c[turn_len:], nor_turns_nor_c[turn_len-max_turn_num:turn_len], nor_r, turn_len, term_len[turn_len-max_turn_num:turn_len], r_len
 
-    return y, nor_turns_nor_c, nor_r, turn_len, term_len, r_len
 
 def build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type='tail'):
     """
@@ -151,6 +163,7 @@ def build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type
     :param term_cut_type:
     :return:
     """
+    _turns_h = []
     _turns = []
     _tt_turns_len = []
     _every_turn_len = []
@@ -160,9 +173,10 @@ def build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type
 
     for i in range(conf['batch_size']):
         index = batch_index * conf['batch_size'] + i
-        y, nor_turns_nor_c, nor_r, turn_len, term_len, r_len = produce_one_sample(data, index, conf['_EOS_'], conf['max_turn_num'],
+        y, nor_turns_nor_h, nor_turns_nor_c, nor_r, turn_len, term_len, r_len = produce_one_sample(data, index, conf['_EOS_'], conf['max_turn_num'],conf['max_turn_history_num'],
                 conf['max_turn_len'], turn_cut_type, term_cut_type)
-
+        
+        _turns_h.append(nor_turns_nor_h)
         _label.append(y)
         _turns.append(nor_turns_nor_c)
         _response.append(nor_r)
@@ -170,7 +184,7 @@ def build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type
         _tt_turns_len.append(turn_len)
         _response_len.append(r_len)
 
-    return _turns, _tt_turns_len, _every_turn_len, _response, _response_len, _label
+    return _turns_h, _turns, _tt_turns_len, _every_turn_len, _response, _response_len, _label
 
 def build_one_batch_dict(data, batch_index, conf, turn_cut_type='tail', term_cut_type='tail'):
     _turns, _tt_turns_len, _every_turn_len, _response, _response_len, _label = build_one_batch(data, batch_index, conf, turn_cut_type, term_cut_type)
@@ -183,6 +197,7 @@ def build_one_batch_dict(data, batch_index, conf, turn_cut_type='tail', term_cut
     return ans
 
 def build_batches(data, conf, turn_cut_type='tail', term_cut_type='tail'):
+    _turns_history = []
     _turns_batches = []
     _tt_turns_len_batches = []
     _every_turn_len_batches = []
@@ -195,8 +210,9 @@ def build_batches(data, conf, turn_cut_type='tail', term_cut_type='tail'):
 
     batch_len = int(len(data['y'])/conf['batch_size'])
     for batch_index in range(batch_len):
-        _turns, _tt_turns_len, _every_turn_len, _response, _response_len, _label = build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type='tail')
-
+        _turns_h, _turns, _tt_turns_len, _every_turn_len, _response, _response_len, _label = build_one_batch(data, batch_index, conf, turn_cut_type='tail', term_cut_type='tail')
+        
+        _turns_history.append(_turns_h)
         _turns_batches.append(_turns)
         _tt_turns_len_batches.append(_tt_turns_len)
         _every_turn_len_batches.append(_every_turn_len)
@@ -208,7 +224,8 @@ def build_batches(data, conf, turn_cut_type='tail', term_cut_type='tail'):
 
     ans = {
         "turns": _turns_batches, "tt_turns_len": _tt_turns_len_batches, "every_turn_len":_every_turn_len_batches,
-        "response": _response_batches, "response_len": _response_len_batches, "label": _label_batches
+        "response": _response_batches, "response_len": _response_len_batches, "label": _label_batches,
+        "turns_history":_turns_history
     }
 
     return ans

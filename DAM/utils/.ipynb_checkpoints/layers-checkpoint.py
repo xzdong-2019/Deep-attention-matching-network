@@ -1,5 +1,68 @@
+#encoding:utf-8
 import tensorflow as tf
-import utils.operations as op
+import operations as op
+import keras
+#import operations as op
+
+def scaled_dot_product_attention(q, k, v, mask):
+    '''attention(Q, K, V) = softmax(Q * K^T / sqrt(dk)) * V'''
+    # query 和 Key相乘
+    matmul_qk = tf.matmul(q, k, transpose_b=True)
+    # 使用dk进行缩放
+    dk = tf.cast(tf.shape(q)[-1], tf.float32)
+    scaled_attention =matmul_qk / tf.sqrt(dk)
+    # 掩码mask
+    if mask is not None:
+        # 这里将mask的token乘以-1e-9，这样与attention相加后，mask的位置经过softmax后就为0
+        # padding位置 mask=1
+        scaled_attention += mask * -1e-9
+    # 通过softmax获取attention权重, mask部分softmax后为0
+    attention_weights = tf.nn.softmax(scaled_attention)  # shape=[batch_size, seq_len_q, seq_len_k]
+    # 乘以value
+    outputs = tf.matmul(attention_weights, v)  # shape=[batch_size, seq_len_q, depth]
+    return outputs, attention_weights
+
+class MultiHeadAttention(keras.layers.Layer):
+    def __init__(self, d_model, num_heads):
+        super(MultiHeadAttention, self).__init__()
+        self.num_heads = num_heads
+        self.d_model = d_model
+        # d_model必须可以正确分成多个头
+        assert d_model % num_heads == 0
+        # 分头之后维度
+        self.depth = d_model // num_heads
+        self.wq = keras.layers.Dense(d_model)
+        self.wk = keras.layers.Dense(d_model)
+        self.wv = keras.layers.Dense(d_model)
+        self.dense = keras.layers.Dense(d_model)
+
+    def split_heads(self, x, batch_size):
+        # 分头，将头个数的维度，放到seq_len前面 x输入shape=[batch_size, seq_len, d_model]
+        x = tf.reshape(x, [batch_size, -1, self.num_heads, self.depth])
+        return tf.transpose(x, perm=[0, 2, 1, 3])
+
+    def __call__(self, q, k, v, mask=None):
+        batch_size = tf.shape(q)[0]
+        # 分头前的前向网络，根据q,k,v的输入，计算Q, K, V语义
+        q = self.wq(q)  # shape=[batch_size, seq_len_q, d_model]
+        k = self.wq(k)
+        v = self.wq(v)
+        # 分头
+        q = self.split_heads(q, batch_size)  # shape=[batch_size, num_heads, seq_len_q, depth]
+        k = self.split_heads(k, batch_size)
+        v = self.split_heads(v, batch_size)
+        # 通过缩放点积注意力层
+        # scaled_attention shape=[batch_size, num_heads, seq_len_q, depth]
+        # attention_weights shape=[batch_size, num_heads, seq_len_q, seq_len_k]
+        scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v, mask)
+        # 把多头维度后移
+        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3]) # shape=[batch_size, seq_len_q, num_heads, depth]
+        # 把多头合并
+        concat_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model)) # shape=[batch_size, seq_len_q, d_model]
+        # 全连接重塑
+        output = self.dense(concat_attention)
+        return output, attention_weights
+    
 def similarity(x, y, x_lengths, y_lengths):
     '''calculate similarity with two 3d tensor.
 
