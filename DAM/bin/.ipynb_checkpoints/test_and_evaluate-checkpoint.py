@@ -7,10 +7,18 @@ import tensorflow as tf
 import numpy as np
 
 import utils.reader as reader
-import utils.evaluation as eva
+import utils.douban_evaluation as eva
+from  utils.utils import load_data, build_batches
 
+#import utils.evaluation as eva
 
 def test(conf, _model):
+    word2dict = {}
+    with open('./data/douban/word2id_douban_utf-8','r') as fr:
+        for line in fr.readlines():
+          print(line)
+          _word_num = line.strip().split()
+          word2dict[_word_num[0]] = _word_num[1]
     
     if not os.path.exists(conf['save_path']):
         os.makedirs(conf['save_path'])
@@ -18,10 +26,11 @@ def test(conf, _model):
     # load data
     print('starting loading data')
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
-    train_data, val_data, test_data = pickle.load(open(conf["data_path"], 'rb'))    
+#     test_data = load_data('./data/douban/test.txt', word2dict)   
+    train_data, val_data, test_data = pickle.load(open(conf["data_path"], 'rb'))
     print('finish loading data')
 
-    test_batches = reader.build_batches(test_data, conf)
+    test_batches = build_batches(test_data, conf)
 
     print("finish building test batches")
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
@@ -51,7 +60,8 @@ def test(conf, _model):
         print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
         for batch_index in xrange(test_batch_num):
                 
-            feed = { 
+            feed = {
+                _model.turns_history:test_batches["turns_history"][batch_index],
                 _model.turns: test_batches["turns"][batch_index],
                 _model.tt_turns_len: test_batches["tt_turns_len"][batch_index],
                 _model.every_turn_len: test_batches["every_turn_len"][batch_index],

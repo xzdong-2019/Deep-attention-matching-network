@@ -2,15 +2,24 @@ import sys
 import os
 import time
 
-import cPickle as pickle
+# import cPickle as pickle
 import tensorflow as tf
 import numpy as np
 
 import utils.reader as reader
 import utils.evaluation as eva
 
+from utils.utils import load_data, build_batches
 
 def train(conf, _model):
+    word2dict = {}
+    with open('./data/douban/word2id_douban_utf-8','r') as fr:
+        for line in fr.readlines():
+          print(line)
+          _word_num = line.strip().split()
+          word2dict[_word_num[0]] = _word_num[1]
+    train_data = load_data('./data/douban/train.txt', word2dict)
+    # print(_word_num)
     
     if conf['rand_seed'] is not None:
         np.random.seed(conf['rand_seed'])
@@ -21,12 +30,15 @@ def train(conf, _model):
     # load data
     print('starting loading data')
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
-    train_data, val_data, test_data = pickle.load(open(conf["data_path"], 'rb'))    
+    #     train_data, val_data, test_data = pickle.load(open(conf["data_path"], 'rb'))    
     print('finish loading data')
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
 
-    val_batches = reader.build_batches(val_data, conf)
+    #     val_batches = reader.build_batches(val_data, conf)
+    val_data = load_data('./data/douban/dev.txt', word2dict)
 
+    #train_batches = build_batches(train_data, conf)
+    val_batches = build_batches(val_data, conf)
     print("finish building test batches")
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
 
@@ -39,6 +51,7 @@ def train(conf, _model):
     conf["print_step"] = int(max(1, batch_num / 200))
 
     print('configurations: %s' %conf)
+    
 
     print('model sucess')
     print(time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time())))
@@ -62,11 +75,11 @@ def train(conf, _model):
             #for batch_index in rng.permutation(range(batch_num)):
             print('starting shuffle train data')
             shuffle_train = reader.unison_shuffle(train_data)
-            train_batches = reader.build_batches(shuffle_train, conf)
+            train_batches = build_batches(shuffle_train, conf)
             print('finish building train data')
             for batch_index in range(batch_num):
-
                 feed = {
+                    _model.turns_history:train_batches["turns_history"][batch_index],
                     _model.turns: train_batches["turns"][batch_index], 
                     _model.tt_turns_len: train_batches["tt_turns_len"][batch_index],
                     _model.every_turn_len: train_batches["every_turn_len"][batch_index],
@@ -101,6 +114,7 @@ def train(conf, _model):
                     for batch_index in xrange(val_batch_num):
                 
                         feed = { 
+                             _model.turns_history:val_batches["turns_history"][batch_index],
                             _model.turns: val_batches["turns"][batch_index],
                             _model.tt_turns_len: val_batches["tt_turns_len"][batch_index],
                             _model.every_turn_len: val_batches["every_turn_len"][batch_index],
